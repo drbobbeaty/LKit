@@ -156,6 +156,24 @@ The sum is: 24.84
 Note that the first argument is `b` as opposed to `a`, and so the sum is
 a `double` value.
 
+TODO List
+---------
+
+I need to put together the parser, with it's inclusion of the basic functions
+for the parser. I also need to handle the control functions like `if` and such.
+These need to be done next.
+
+Past the basics, I need to start looking at speed and efficient updating of
+the expressions and therefore the resulting parser tree. I don't want to
+recalculate things that haven't changed, and constants don't change, so it's
+going to make a partial update scheme possible.
+
+Beyond that, I need to think about the syntax for time-series data.
+Specifically, how do I want to short-hand the processing of time-series
+data: filters, sliding windows, etc. There needs to be something other
+than a simple looping construct. There's a lot to be gained in the
+efficiency of the processing that way.
+
 License
 -------
 
