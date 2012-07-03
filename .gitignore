@@ -1,0 +1,5 @@
+*.bak
+*.dSYM
+*.swp
+*.o
+lib
