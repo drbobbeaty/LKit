@@ -96,6 +96,17 @@ value::value( const value & anOther ) :
 
 
 /**
+ * This is the standard clone method that we'll have for all
+ * classes so that it's possible to clone the value without
+ * having to worry about memory management, etc.
+ */
+value *value::clone() const
+{
+	return new value(*this);
+}
+
+
+/**
  * This is the standard destructor and needs to be virtual to make
  * sure that if we subclass off this, the right destructor will be
  * called.

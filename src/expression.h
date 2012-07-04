@@ -80,6 +80,12 @@ class expression :
 		 * floating around in the system.
 		 */
 		expression( const expression & anOther );
+		/**
+		 * This is the standard clone method that we'll have for all
+		 * classes so that it's possible to clone the value without
+		 * having to worry about memory management, etc.
+		 */
+		virtual value *clone() const;
 
 		/**
 		 * This is the standard destructor and needs to be virtual to make
