@@ -174,6 +174,20 @@ data: filters, sliding windows, etc. There needs to be something other
 than a simple looping construct. There's a lot to be gained in the
 efficiency of the processing that way.
 
+### Quick List of Ideas
+
+*	Put in detection of _change_ in the `lkit::expression` values. This
+	will then allow us to skip the calculation of an expression if the
+	arguments haven't changed since the last calculation. This is a big
+	speed boost.
+*	Put in "delta" driven updates for the expressions. Allow that those
+	functions _not_ supporting delta-updates will still work, but they
+	won't work as efficiently.
+*	If we need to have simple arithmetic processing, pull in muParser
+	from CKit and retrofit the `lkit::value` for the `CKVariant` in the
+	code. This gives us a completely new way to work on the expressions
+	without any additional complication in the code.
+
 License
 -------
 
