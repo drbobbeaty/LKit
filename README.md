@@ -103,7 +103,7 @@ a = 10.1;
 b = 5.5;
 c = 3.14;
 d = 6.2;
-lkit::func::max		f;
+lkit::func::sum		f;
 lkit::expression	y(&f, &a, &b, &c, &d);
 std::cout << "The sum is: " << y.evalAsDouble() << std::endl;
 ```
@@ -122,7 +122,7 @@ a = 10;
 b = 5.5;
 c = 3.14;
 d = 6.2;
-lkit::func::max		f;
+lkit::func::sum		f;
 lkit::expression	y(&f, &a, &b, &c, &d);
 std::cout << "The sum is: " << y.evalAsDouble() << std::endl;
 ```
@@ -145,7 +145,7 @@ a = 10;
 b = 5.5;
 c = 3.14;
 d = 6.2;
-lkit::func::max		f;
+lkit::func::sum		f;
 lkit::expression	y(&f, &b, &a, &c, &d);
 std::cout << "The sum is: " << y.evalAsDouble() << std::endl;
 ```
