@@ -365,6 +365,7 @@ std::string value::toString() const
 size_t value::hash() const
 {
 	size_t	ans = 0;
+	boost::detail::spinlock::scoped_lock	lock(_mutex);
 	switch (_type) {
 		case eUnknown:											break;
 		case eBool:		ans = boost::hash_value(_boolValue);	break;
