@@ -61,6 +61,14 @@ class function
 
 
 		/**
+		 * This is the standard clone method that we'll have for all
+		 * classes so that it's possible to clone the function without
+		 * having to worry about memory management, etc.
+		 */
+		virtual function *clone() const = 0;
+
+
+		/**
 		 * This is the standard destructor and needs to be virtual to make
 		 * sure that if we subclass off this, the right destructor will be
 		 * called.
