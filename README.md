@@ -260,7 +260,15 @@ look like this:
 	(set x 14.5)
 
 and allow for variables to have their values set as many times as needed.
-Meaning they will **not** be immutable variables.
+Meaning they will **not** be immutable variables. But they will be set at
+compile time, so the user is going to have to be careful about the order
+that the variable assignments are being made. The _expression_ that
+is generated for this assignment _function_ is simply the variable itself,
+so the following:
+
+	(+ 1 2 (set x 3))
+
+evaluates to `6`.
 
 ### Function Definition
 
