@@ -64,7 +64,7 @@ LDFLAGS = -fPIC $(LIBS) $(LDD_FLAGS)
 # These are all the components of DKit
 #
 .SUFFIXES: .h .cpp .o
-OBJS = value.o variable.o function.o base_functions.o expression.o
+OBJS = value.o variable.o function.o base_functions.o expression.o parser.o
 SRCS = $(OBJS:%.o=%.cpp)
 
 #
@@ -94,3 +94,5 @@ variable.o: variable.h value.h
 function.o: function.h value.h
 base_functions.o: base_functions.h function.h value.h
 expression.o: expression.h value.h function.h
+parser.o: parser.h variable.h value.h base_functions.h function.h
+parser.o: expression.h util/timer.h
