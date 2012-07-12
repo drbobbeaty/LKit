@@ -260,10 +260,29 @@ class expression :
 		 * will be placed on the instance in the process of setting
 		 * these values. That means the caller has to do it.
 		 */
+		virtual value eval_nl();
 		virtual bool evalAsBool_nl();
 		virtual int evalAsInt_nl();
 		virtual double evalAsDouble_nl();
 		virtual uint64_t evalAsTime_nl();
+
+		/*******************************************************************
+		 *
+		 *                      Subclass Utility Methods
+		 *
+		 *******************************************************************/
+		/**
+		 * There are a lot of times that a human-readable version of
+		 * this instance will come in handy. This is that method. It's
+		 * not necessarily meant to be something to process, but most
+		 * likely what a debugging system would want to write out for
+		 * this guy.
+		 *
+		 * The key with the "_nl" is that it means "no lock". No lock
+		 * will be placed on the instance in the process of generating
+		 * the human-readable string. That means the caller has to do it.
+		 */
+		virtual std::string toString_nl() const;
 
 	private:
 		/**

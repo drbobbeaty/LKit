@@ -363,21 +363,7 @@ void expression::clearArgs()
 std::string expression::toString() const
 {
 	spinlock::scoped_lock	lock((spinlock &)mutex());
-	std::ostringstream	msg;
-	msg << "[";
-	if (!_name.empty()) {
-		msg << "'" << _name << "' ";
-	}
-	msg << "fn=" << (_fcn == NULL ? "<null>" : _fcn->toString().c_str())
-		<< " args=(";
-	for (size_t i = 0; i < _args.size(); ++i) {
-		if (i > 0) {
-			msg << ", ";
-		}
-		msg << (_args[i] == NULL ? "<null>" : _args[i]->toString().c_str());
-	}
-	msg << ")]";
-	return msg.str();
+	return toString_nl();
 }
 
 
@@ -477,6 +463,15 @@ bool expression::operator!=( const value & anOther ) const
  * will be placed on the instance in the process of setting
  * these values. That means the caller has to do it.
  */
+value expression::eval_nl()
+{
+	if (_fcn != NULL) {
+		set_nl(_fcn->eval(_args));
+	}
+	return value(*this);
+}
+
+
 bool expression::evalAsBool_nl()
 {
 	if (_fcn != NULL) {
@@ -510,6 +505,42 @@ uint64_t expression::evalAsTime_nl()
 		set_nl(_fcn->eval(_args));
 	}
 	return value::evalAsTime_nl();
+}
+
+
+/*******************************************************************
+ *
+ *                      Subclass Utility Methods
+ *
+ *******************************************************************/
+/**
+ * There are a lot of times that a human-readable version of
+ * this instance will come in handy. This is that method. It's
+ * not necessarily meant to be something to process, but most
+ * likely what a debugging system would want to write out for
+ * this guy.
+ *
+ * The key with the "_nl" is that it means "no lock". No lock
+ * will be placed on the instance in the process of generating
+ * the human-readable string. That means the caller has to do it.
+ */
+std::string expression::toString_nl() const
+{
+	std::ostringstream	msg;
+	msg << "[";
+	if (!_name.empty()) {
+		msg << "'" << _name << "' ";
+	}
+	msg << "fn=" << (_fcn == NULL ? "<null>" : _fcn->toString().c_str())
+		<< " args=(";
+	for (size_t i = 0; i < _args.size(); ++i) {
+		if (i > 0) {
+			msg << ", ";
+		}
+		msg << (_args[i] == NULL ? "<null>" : _args[i]->toString().c_str());
+	}
+	msg << ")]";
+	return msg.str();
 }
 }		// end of namespace lkit
 
