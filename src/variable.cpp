@@ -50,6 +50,20 @@ variable::variable() :
 
 
 /**
+ * This version of the constructor takes the name of the variable
+ * and sets that but does not attempt to set the VALUE of the
+ * variable at all. This will be commonly used in the parsing of
+ * expressions when a variable is defined in the code, and not
+ * yet provided by the caller.
+ */
+variable::variable( const std::string & aName ) :
+	value(),
+	_name(aName)
+{
+}
+
+
+/**
  * These constructors take the different allowed types and create
  * variables based on that argument. This sets the name, type as
  * well as the actual value for this new instance.
