@@ -56,7 +56,7 @@ LDFLAGS =
 #
 # These are the main targets that we'll be making
 #
-APPS = value expression
+APPS = value expression parser timer
 SRCS = $(APPS:%=%.cpp)
 
 all: $(APPS)
@@ -78,8 +78,19 @@ depend:
 expression: expression.cpp $(LIB_FILE)
 	$(CXX) $(CXXFLAGS) expression.cpp -o expression $(LIBS) $(LDFLAGS)
 
+parser: parser.cpp $(LIB_FILE)
+	$(CXX) $(CXXFLAGS) parser.cpp -o parser $(LIBS) $(LDFLAGS)
+
+timer: timer.cpp $(LIB_FILE)
+	$(CXX) $(CXXFLAGS) timer.cpp -o timer $(LIBS) $(LDFLAGS)
+
 value: value.cpp $(LIB_FILE)
 	$(CXX) $(CXXFLAGS) value.cpp -o value $(LIBS) $(LDFLAGS)
 
 # DO NOT DELETE
 
+value : ../src/value.h ../src/util/timer.h
+expression : ../src/value.h ../src/base_functions.h ../src/function.h
+expression : ../src/expression.h ../src/util/timer.h
+parser : ../src/parser.h ../src/variable.h ../src/value.h ../src/util/timer.h
+timer : ../src/util/timer.h
