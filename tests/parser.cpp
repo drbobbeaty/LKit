@@ -28,6 +28,18 @@ int main(int argc, char *argv[]) {
 	}
 
 	if (!error) {
+		std::string		src = "(max 1 2 3)";
+		lkit::value		ref = 3;
+		p.setSource(src);
+		if (p.eval() == ref) {
+			std::cout << "Success, parsed " << src << " into: " << ref << std::endl;
+		} else {
+			error = true;
+			std::cout << "ERROR, unable to parse " << src << " into: " << ref << " ... got: " << p.eval() << std::endl;
+		}
+	}
+
+	if (!error) {
 		std::string		src = "(/ 10.0 2.0 5.0)";
 		lkit::value		ref = 1.0;
 		p.setSource(src);
