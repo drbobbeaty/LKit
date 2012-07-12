@@ -194,6 +194,52 @@ class timer
 			// return what we have created.
 			return buff;
 		}
+
+
+		/**
+		 * This method takes the string representation of a timestamp and
+		 * we are going to convert that into a uint64_t number of usec
+		 * since epoch. This is the reverse of the format methods, and is
+		 * completely reversable.
+		 */
+		static inline uint64_t parseTimestamp( const std::string & aTimestamp )
+		{
+			// this will get us to usec from seconds - just 1e6
+			static uint64_t	__mult = 1000000;
+
+			uint64_t	stamp = 0;
+			// start with an empty time structure and then fill it as we can
+			struct tm	when;
+			bzero(&when, sizeof(when));
+			// let's determine what we likely have for the format
+			size_t	len = aTimestamp.length();
+			bool	gotDate = ((aTimestamp.find('-') != std::string::npos) &&
+							   (len >= 10));
+			bool	gotTime = ((aTimestamp.find(':') != std::string::npos) &&
+							   (len >= 8));
+			if (gotDate && gotTime) {
+				if (strptime(aTimestamp.c_str(), "%Y-%m-%d %H:%M:%S", &when) != NULL) {
+					stamp = mktime(&when) * __mult;
+				}
+			} else if (gotDate) {
+				if (strptime(aTimestamp.c_str(), "%Y-%m-%d", &when) != NULL) {
+					stamp = mktime(&when) * __mult;
+				}
+			} else if (gotTime) {
+				uint64_t	hrs = (aTimestamp[0] - '0') * 10 + (aTimestamp[1] - '0');
+				uint64_t	mins = (aTimestamp[3] - '0') * 10 + (aTimestamp[4] - '0');
+				uint64_t	secs = (aTimestamp[6] - '0') * 10 + (aTimestamp[7] - '0');
+				stamp = ((((hrs * 60) + mins) * 60) + secs) * __mult;
+			}
+			// now look for any fractional seconds on the time
+			size_t		pos = aTimestamp.rfind('.');
+			if (pos < aTimestamp.length() - 1) {
+				std::string		frac = aTimestamp.substr(pos+1);
+				frac.append("0000000");
+				stamp += atoi(frac.substr(0,6).c_str());
+			}
+			return stamp;
+		}
 };
 }		// end of namespace util
 }		// end of namespace lkit
