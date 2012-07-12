@@ -156,17 +156,133 @@ The sum is: 24.84
 Note that the first argument is `b` as opposed to `a`, and so the sum is
 a `double` value.
 
+The Language Syntax
+-------------------
+
+While it's possible to use these classes in _any_ kind of language, there
+exists in LKit, the `lkit::parser` class to convert _source code_ into a
+_Langueage Tree_ built up of these class components. The description of the
+language is pretty simple, as it's meant to be a simple, transparent, mapping
+of these components into a human-readable grammar.
+
+### The Basic Expression
+
+The basic _expression_ is a _function_ followed by a white-space, and then
+zero or more _arguments_ to the _function_, each separated by a white-space,
+all surrounded by parentheses. Here is an example where the user wants to
+arithmetically sum three integers:
+
+	(+ 5 3 2)
+
+The above example is equivalent to the infix-notation:
+
+	5 + 3 + 2
+
+and all evaluate to:
+
+	10
+
+For _functions_ (i.e. operators) where order doesn't matter, the evaluated
+value is independent of the order of the _arguments_. However, for _functions_
+like subtraction and division, the order matters quite a bit, and the way the
+evaluation is done is based on the idea of placing the operator between each
+argument and then calculating left to right.
+
+So the following _expression_:
+
+	(- 5 3 2)
+
+is equivalent to the infix notation of:
+
+	5 - 3 - 2
+
+which evaluates to:
+
+	0
+
+The evaluation is similar for division:
+
+	(/ 10.0 2.0 5.0)
+
+is equivalent to the infix notation:
+
+	10.0 / 2.0 / 5.0
+
+and evaluates to:
+
+	1.0
+
+### Expressions as Values in Expressions
+
+Of course this can all be included as a _value_ (a.k.a. _argument_) in another
+_expression_:
+
+	(+ (/ 10.0 2.5) (* (+ 1.5 2 6) 2.0))
+
+in infix notation:
+
+	(10.0 / 2.5) + (1.5 + 2 + 6) * 2.0
+
+which evaluates to:
+
+	23
+
+### Equalities, Inequalities, and Logical Functions
+
+In addition to the obvious arithmetic functions, there are the complete
+suite of equality and inequality functions where for `==` _all_ elements
+have to be equal to one another, and for `!=` the first argument is the
+'test' condition, and _all remaining_ elements have to be not equal to
+this 'test' value. Again, it's the same as _distributing_ the operator
+in between the arguments and processing left to right.
+
+The following table has several examples of the functions and their
+respective results:
+
+| Expression                           | Evaluates to |
+|:-------------------------------------|:------------:|
+|`(== 1 1.0 (* 2.0 0.5))`              | true         |
+|`(!= 1 1.0 (* 2.0 0.5) (/ 2.0 1.0))`  | false        |
+|`(< 1 3 5 6 10)`                      | true         |
+|`(> 10 9 8 5 5 2)`                    | false        |
+|`(or 1 0 0 1)`                        | true         |
+|`(and 1 0 0 1)`                       | false        |
+|`(not 1)`                             | false        |
+
 TODO List
 ---------
 
-I need to put together the parser, with it's inclusion of the basic functions
-for the parser. I also need to handle the control functions like `if` and such.
-These need to be done next.
+### Variable Definition and Assignment
+
+I need to add in the basic variable assignment code to the parser. This should
+look like this:
+
+	(set x 14.5)
+
+and allow for variables to have their values set as many times as needed.
+Meaning they will **not** be immutable variables.
+
+### Function Definition
+
+I also need to add in the function definition to the parser. A simple function
+that adds two numbers might look like this:
+
+	(defun add [a, b] (+ a b))
+
+I'm not sure about the syntax for the variables, but we'll see.
+
+One thing for sure - the user-defined functions will have to be in the code
+_before_ they are referenced in the code itself. I'm not going to mess with
+a two-pass compilation process at this point.
+
+### Performance
 
 Past the basics, I need to start looking at speed and efficient updating of
 the expressions and therefore the resulting parser tree. I don't want to
 recalculate things that haven't changed, and constants don't change, so it's
 going to make a partial update scheme possible.
+
+### Time-Series Data
 
 Beyond that, I need to think about the syntax for time-series data.
 Specifically, how do I want to short-hand the processing of time-series
