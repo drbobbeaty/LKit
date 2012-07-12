@@ -54,14 +54,14 @@ value max::eval( std::vector<value *> & anArg )
 	}
 	// if we have something, then get it, and process the rest
 	if (pos < sz) {
-		ans = *(anArg[pos++]);
+		ans = anArg[pos++]->eval();
 		// run through all the rest, comparing as we go
 		value	*v = NULL;
 		while (pos < sz) {
 			// get the pointer to the next argument in the list
 			v = anArg[pos];
 			// simply look for the largest one that's not undefined
-			if ((v != NULL) && !v->isUndefined()) {
+			if ((v != NULL) && !v->eval().isUndefined()) {
 				ans = (*v > ans ? *v : ans);
 			}
 			++pos;
@@ -123,14 +123,14 @@ value min::eval( std::vector<value *> & anArg )
 	}
 	// if we have something, then get it, and process the rest
 	if (pos < sz) {
-		ans = *(anArg[pos++]);
+		ans = anArg[pos++]->eval();
 		// run through all the rest, comparing as we go
 		value	*v = NULL;
 		while (pos < sz) {
 			// get the pointer to the next argument in the list
 			v = anArg[pos];
 			// simply look for the smallest one that's not undefined
-			if ((v != NULL) && !v->isUndefined()) {
+			if ((v != NULL) && !v->eval().isUndefined()) {
 				ans = (*v < ans ? *v : ans);
 			}
 			++pos;
@@ -192,14 +192,14 @@ value sum::eval( std::vector<value *> & anArg )
 	}
 	// if we have something, then get it, and process the rest
 	if (pos < sz) {
-		ans = *(anArg[pos++]);
+		ans = anArg[pos++]->eval();
 		// run through all the rest, comparing as we go
 		value	*v = NULL;
 		while (pos < sz) {
 			// get the pointer to the next argument in the list
 			v = anArg[pos];
 			// simply sum up all the valid values as best we can...
-			if ((v != NULL) && !v->isUndefined()) {
+			if ((v != NULL) && !v->eval().isUndefined()) {
 				ans += *v;
 			}
 			++pos;
@@ -261,7 +261,7 @@ value diff::eval( std::vector<value *> & anArg )
 	}
 	// if we have something, then get it, and process the rest
 	if (pos < sz) {
-		ans = *(anArg[pos++]);
+		ans = anArg[pos++]->eval();
 		// check for unary minus
 		if (pos >= sz) {
 			// unary minus - just negate what we have
@@ -273,7 +273,7 @@ value diff::eval( std::vector<value *> & anArg )
 				// get the pointer to the next argument in the list
 				v = anArg[pos];
 				// simply difference all the valid values as best we can...
-				if ((v != NULL) && !v->isUndefined()) {
+				if ((v != NULL) && !v->eval().isUndefined()) {
 					ans -= *v;
 				}
 				++pos;
@@ -336,14 +336,14 @@ value prod::eval( std::vector<value *> & anArg )
 	}
 	// if we have something, then get it, and process the rest
 	if (pos < sz) {
-		ans = *(anArg[pos++]);
+		ans = anArg[pos++]->eval();
 		// run through all the rest, comparing as we go
 		value	*v = NULL;
 		while (pos < sz) {
 			// get the pointer to the next argument in the list
 			v = anArg[pos];
 			// simply multiply all the valid values as best we can...
-			if ((v != NULL) && !v->isUndefined()) {
+			if ((v != NULL) && !v->eval().isUndefined()) {
 				ans *= *v;
 			}
 			++pos;
@@ -405,14 +405,14 @@ value quot::eval( std::vector<value *> & anArg )
 	}
 	// if we have something, then get it, and process the rest
 	if (pos < sz) {
-		ans = *(anArg[pos++]);
+		ans = anArg[pos++]->eval();
 		// run through all the rest, comparing as we go
 		value	*v = NULL;
 		while (pos < sz) {
 			// get the pointer to the next argument in the list
 			v = anArg[pos];
 			// simply divide all the valid values as best we can...
-			if ((v != NULL) && !v->isUndefined()) {
+			if ((v != NULL) && !v->eval().isUndefined()) {
 				ans /= *v;
 			}
 			++pos;
@@ -474,8 +474,9 @@ value comp::eval( std::vector<value *> & anArg )
 	}
 	// if we have something, then get it, and process the rest
 	bool		comp = true;
+	size_t		cnt = 0;
 	if (pos < sz) {
-		value	first = *(anArg[pos++]);
+		value	first = anArg[pos++]->eval();
 		// run through all the rest, comparing as we go
 		value	*v = NULL;
 		bool	keepGoing = true;
@@ -483,23 +484,25 @@ value comp::eval( std::vector<value *> & anArg )
 			// get the pointer to the next argument in the list
 			v = anArg[pos];
 			// simply check all the valid values as best we can...
-			if ((v != NULL) && !v->isUndefined()) {
+			if ((v != NULL) && !v->eval().isUndefined()) {
+				// make sure we count the valid values
+				++cnt;
 				// based on what we are, check for show stopper
 				switch (_type) {
 					case eEquals :
-						if (first != (const value &)*v) {
+						if (first != *v) {
 							comp = false;
 							keepGoing = false;
 						}
 						break;
 					case eNotEquals :
-						if (first == (const value &)*v) {
+						if (first == *v) {
 							comp = false;
 							keepGoing = false;
 						}
 						break;
 					case eLessThan :
-						if (first < (const value &)*v) {
+						if (first < *v) {
 							// compare against this value now
 							first = *v;
 						} else {
@@ -508,7 +511,7 @@ value comp::eval( std::vector<value *> & anArg )
 						}
 						break;
 					case eGreaterThan :
-						if (first > (const value &)*v) {
+						if (first > *v) {
 							// compare against this value now
 							first = *v;
 						} else {
@@ -517,7 +520,7 @@ value comp::eval( std::vector<value *> & anArg )
 						}
 						break;
 					case eLessOrEqual :
-						if (first <= (const value &)*v) {
+						if (first <= *v) {
 							// compare against this value now
 							first = *v;
 						} else {
@@ -526,7 +529,7 @@ value comp::eval( std::vector<value *> & anArg )
 						}
 						break;
 					case eGreaterOrEqual :
-						if (first >= (const value &)*v) {
+						if (first >= *v) {
 							// compare against this value now
 							first = *v;
 						} else {
@@ -539,7 +542,12 @@ value comp::eval( std::vector<value *> & anArg )
 			++pos;
 		}
 	}
-	return comp;
+	// now make the return value for the caller
+	value	ans;
+	if (cnt > 0) {
+		ans = comp;
+	}
+	return ans;
 }
 
 
@@ -596,32 +604,36 @@ value bin::eval( std::vector<value *> & anArg )
 	size_t		pos = 0;
 	// assume the test is true, and check it
 	bool		test = true;
+	size_t		cnt = 0;
 	if (pos < sz) {
 		// run through all the values, checking as we go
 		value	*v = NULL;
+		value	val;
 		bool	keepGoing = true;
 		while (keepGoing && (pos < sz)) {
 			// get the pointer to the next argument in the list
 			v = anArg[pos];
 			// simply check all the valid values as best we can...
-			if ((v != NULL) && !v->isUndefined()) {
+			if ((v != NULL) && !(val = v->eval()).isUndefined()) {
+				// make sure we count the valid values
+				++cnt;
 				// based on what we are, check for show stopper
 				switch (_type) {
 					case eAnd :
-						if (!v->evalAsBool()) {
+						if (!val.evalAsBool()) {
 							test = false;
 							keepGoing = false;
 						}
 						break;
 					case eOr :
-						if (v->evalAsBool()) {
+						if (val.evalAsBool()) {
 							test = true;
 							keepGoing = false;
 						}
 						break;
 					case eNot :
 						// this is a unary operator
-						test = !v->evalAsBool();
+						test = !val.evalAsBool();
 						keepGoing = false;
 						break;
 				}
@@ -629,7 +641,12 @@ value bin::eval( std::vector<value *> & anArg )
 			++pos;
 		}
 	}
-	return test;
+	// now make the return value for the caller
+	value	ans;
+	if (cnt > 0) {
+		ans = test;
+	}
+	return ans;
 }
 
 
