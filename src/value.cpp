@@ -214,6 +214,13 @@ bool value::set( uint64_t aValue )
  * involved in getting the value. This will be the way to get
  * constants as well as evaluate functions and expressions.
  */
+value value::eval()
+{
+	boost::detail::spinlock::scoped_lock	lock(_mutex);
+	return eval_nl();
+}
+
+
 bool value::evalAsBool()
 {
 	boost::detail::spinlock::scoped_lock	lock(_mutex);
@@ -413,27 +420,27 @@ bool value::operator==( const value & anOther ) const
  * These versions of the '==' operator will handle the fixed
  * value equality checks where we have a known data type.
  */
-bool value::operator==( bool aValue )
+bool value::operator==( bool aValue ) const
 {
-	return (evalAsBool() == aValue);
+	return (((value *)this)->evalAsBool() == aValue);
 }
 
 
-bool value::operator==( int aValue )
+bool value::operator==( int aValue ) const
 {
-	return (evalAsInt() == aValue);
+	return (((value *)this)->evalAsInt() == aValue);
 }
 
 
-bool value::operator==( double aValue )
+bool value::operator==( double aValue ) const
 {
-	return (evalAsDouble() == aValue);
+	return (((value *)this)->evalAsDouble() == aValue);
 }
 
 
-bool value::operator==( uint64_t aValue )
+bool value::operator==( uint64_t aValue ) const
 {
-	return (evalAsTime() == aValue);
+	return (((value *)this)->evalAsTime() == aValue);
 }
 
 
@@ -452,25 +459,25 @@ bool value::operator!=( const value & anOther ) const
  * These versions of the '!=' operator will handle the fixed
  * value equality checks where we have a known data type.
  */
-bool value::operator!=( bool aValue )
+bool value::operator!=( bool aValue ) const
 {
 	return !operator==(aValue);
 }
 
 
-bool value::operator!=( int aValue )
+bool value::operator!=( int aValue ) const
 {
 	return !operator==(aValue);
 }
 
 
-bool value::operator!=( double aValue )
+bool value::operator!=( double aValue ) const
 {
 	return !operator==(aValue);
 }
 
 
-bool value::operator!=( uint64_t aValue )
+bool value::operator!=( uint64_t aValue ) const
 {
 	return !operator==(aValue);
 }
@@ -1301,6 +1308,30 @@ value & value::operator/=( uint64_t aValue )
 }
 
 
+/**
+ * These are the binary operators for the values. They will
+ * generate a boolean value as they aren't mutating the
+ * target of the method, but combining the logical values of
+ * two value instances.
+ */
+bool value::operator!() const
+{
+	return !((value *)this)->evalAsBool();
+}
+
+
+bool value::operator&&( const value & anOther ) const
+{
+	return (((value *)this)->evalAsBool() && ((value &)anOther).evalAsBool());
+}
+
+
+bool value::operator||( const value & anOther ) const
+{
+	return (((value *)this)->evalAsBool() || ((value &)anOther).evalAsBool());
+}
+
+
 /*******************************************************************
  *
  *                      Subclass Accessor Methods
@@ -1376,6 +1407,13 @@ void value::clear_nl()
  * will be placed on the instance in the process of setting
  * these values. That means the caller has to do it.
  */
+value value::eval_nl()
+{
+	// this is just making a copy of this guy's value
+	return value(*this);
+}
+
+
 bool value::evalAsBool_nl()
 {
 	bool		retval = false;

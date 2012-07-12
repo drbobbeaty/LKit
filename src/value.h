@@ -121,6 +121,7 @@ class value
 		 * involved in getting the value. This will be the way to get
 		 * constants as well as evaluate functions and expressions.
 		 */
+		virtual value eval();
 		virtual bool evalAsBool();
 		virtual int evalAsInt();
 		virtual double evalAsDouble();
@@ -187,10 +188,10 @@ class value
 		 * These versions of the '==' operator will handle the fixed
 		 * value equality checks where we have a known data type.
 		 */
-		bool operator==( bool aValue );
-		bool operator==( int aValue );
-		bool operator==( double aValue );
-		bool operator==( uint64_t aValue );
+		bool operator==( bool aValue ) const;
+		bool operator==( int aValue ) const;
+		bool operator==( double aValue ) const;
+		bool operator==( uint64_t aValue ) const;
 		/**
 		 * This method checks to see if two values are NOT equal in their
 		 * contents and not their pointer values. This is how you'd likely
@@ -201,10 +202,10 @@ class value
 		 * These versions of the '!=' operator will handle the fixed
 		 * value equality checks where we have a known data type.
 		 */
-		bool operator!=( bool aValue );
-		bool operator!=( int aValue );
-		bool operator!=( double aValue );
-		bool operator!=( uint64_t aValue );
+		bool operator!=( bool aValue ) const;
+		bool operator!=( int aValue ) const;
+		bool operator!=( double aValue ) const;
+		bool operator!=( uint64_t aValue ) const;
 		/**
 		 * These methods complete the inequality tests for the value and
 		 * we need these as we might be doing a lot of testing and this
@@ -268,6 +269,16 @@ class value
 		value & operator/=( int aValue );
 		value & operator/=( double aValue );
 		value & operator/=( uint64_t aValue );
+
+		/**
+		 * These are the binary operators for the values. They will
+		 * generate a boolean value as they aren't mutating the
+		 * target of the method, but combining the logical values of
+		 * two value instances.
+		 */
+		bool operator!() const;
+		bool operator&&( const value & anOther ) const;
+		bool operator||( const value & anOther ) const;
 
 		/*
 		 * There are times that values will be used in mathematical
@@ -360,6 +371,7 @@ class value
 		 * will be placed on the instance in the process of setting
 		 * these values. That means the caller has to do it.
 		 */
+		virtual value eval_nl();
 		virtual bool evalAsBool_nl();
 		virtual int evalAsInt_nl();
 		virtual double evalAsDouble_nl();
