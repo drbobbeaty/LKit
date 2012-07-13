@@ -59,7 +59,7 @@ typedef std::vector<lkit::expression *> expr_list_t;
  * pick a simple boost map where the key is the variable's name and the
  * value is the pointer to the actual value.
  */
-typedef boost::unordered_map<std::string, lkit::value *> var_map_t;
+typedef boost::unordered_map<std::string, lkit::variable *> var_map_t;
 /**
  * We are going to have a map of the function names to the actual pointers
  * to the lkit::function instances, and rather than clutter up the code
@@ -156,8 +156,10 @@ class parser
 		 * the parser from this point on, so the caller must give
 		 * over control to the parser for these arguments.
 		 */
-		virtual bool addVariable( variable *aVariable );
-		virtual bool addVariable( const std::string & aName, value *aValue );
+		virtual bool addVariable( const variable & aVariable );
+		virtual bool addVariable( variable * & aVariable );
+		virtual bool addVariable( const std::string & aName, const value & aValue );
+		virtual bool addVariable( const std::string & aName, value * & aValue );
 		/**
 		 * This method returns the pointer to the value for the
 		 * provided variable name. The returned pointer is the
@@ -380,7 +382,17 @@ class parser
 		 * recursively to generate the complete, final expression for
 		 * the code starting at this point.
 		 */
-		virtual expression *parseExpr( const std::string & aSrc, uint32_t & aPos );
+		virtual value *parseExpr( const std::string & aSrc, uint32_t & aPos );
+		/**
+		 * This method assumes that it's pointing into the source
+		 * string just AFTER the '(set' part of a variable definition.
+		 * We need to finish parsing the variable name and value -
+		 * no matter how complex that value might be, and return it
+		 * as a new variable. The caller will be responsible for
+		 * deleting the variable when he's done with it or we will
+		 * leak.
+		 */
+		virtual variable *parseVariable( const std::string & aSrc, uint32_t & aPos );
 		/**
 		 * This method takes a parsed string (token) from the source
 		 * and depending on the state of the current expression we're
@@ -391,6 +403,14 @@ class parser
 		 * the expression properly;
 		 */
 		virtual bool handleToken( expression *anExpr, const std::string & aToken );
+		/**
+		 * This method looks at the provided string and attempts to
+		 * parse out a constant from it and return it as a new value
+		 * pointer. If this is NOT successful, then this method
+		 * will return NULL, but if not-NULL, it is the responsibility
+		 * of the caller to delete the returned value or we will leak.
+		 */
+		virtual value *parseConst( const std::string & aToken );
 
 	private:
 		/**
@@ -445,7 +465,7 @@ class parser
 		 * The control of this ivar will be inline with the source as it's
 		 * the direct parsed result of the source.
 		 */
-		expression						*_expr;
+		value							*_expr;
 };
 }		// end of namespace lkit
 

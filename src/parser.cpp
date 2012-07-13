@@ -207,7 +207,27 @@ const var_map_t & parser::getVariables() const
  * the parser from this point on, so the caller must give
  * over control to the parser for these arguments.
  */
-bool parser::addVariable( variable *aVariable )
+bool parser::addVariable( const variable & aVariable )
+{
+	bool		error = false;
+
+	spinlock::scoped_lock		lock(_vars_mutex);
+	// see if we already have a variable with this name
+	std::string		name = aVariable.getName();
+	variable	*old = _vars[name];
+	if (old != NULL) {
+		// assign the new value to the existing variable
+		*old = aVariable;
+	} else {
+		// place a clone of the variable in the map
+		_vars[name] = (variable *)aVariable.clone();
+	}
+
+	return !error;
+}
+
+
+bool parser::addVariable( variable * & aVariable )
 {
 	bool		error = false;
 	if (aVariable == NULL) {
@@ -216,11 +236,12 @@ bool parser::addVariable( variable *aVariable )
 		spinlock::scoped_lock		lock(_vars_mutex);
 		// see if we already have a variable with this name
 		std::string		name = aVariable->getName();
-		value	*old = _vars[name];
+		variable	*old = _vars[name];
 		if (old != NULL) {
 			// assign the new value to the existing variable
 			*old = *aVariable;
 			delete aVariable;
+			aVariable = old;
 		} else {
 			// place the new variable into the map
 			_vars[name] = aVariable;
@@ -230,7 +251,7 @@ bool parser::addVariable( variable *aVariable )
 }
 
 
-bool parser::addVariable( const std::string & aName, value *aValue )
+bool parser::addVariable( const std::string & aName, value * & aValue )
 {
 	bool		error = false;
 	if (aValue == NULL) {
@@ -238,16 +259,36 @@ bool parser::addVariable( const std::string & aName, value *aValue )
 	} else {
 		spinlock::scoped_lock		lock(_vars_mutex);
 		// see if we already have a variable with this name
-		value	*old = _vars[aName];
+		variable	*old = _vars[aName];
 		if (old != NULL) {
 			// assign the new value to the existing variable
 			*old = *aValue;
 			delete aValue;
+			aValue = old;
 		} else {
 			// place the new value into the map
-			_vars[aName] = aValue;
+			_vars[aName] = new variable(aName, aValue);
 		}
 	}
+	return !error;
+}
+
+
+bool parser::addVariable( const std::string & aName, const value & aValue )
+{
+	bool		error = false;
+
+	spinlock::scoped_lock		lock(_vars_mutex);
+	// see if we already have a variable with this name
+	variable	*old = _vars[aName];
+	if (old != NULL) {
+		// assign the new value to the existing variable
+		*old = aValue;
+	} else {
+		// place a new variable into the map
+		_vars[aName] = new variable(aName, aValue.clone());
+	}
+
 	return !error;
 }
 
@@ -282,9 +323,19 @@ const value *parser::getVariable( const std::string & aName )
  */
 bool parser::removeVariable( std::string & aName )
 {
+	bool		removed = false;
 	spinlock::scoped_lock		lock(_vars_mutex);
-	// based on how many are erased, return the right flag
-	return (_vars.erase(aName) > 0);
+	// try to find the variable for the provided name
+	var_map_t::iterator	it = _vars.find(aName);
+	if (it != _vars.end()) {
+		if (it->second != NULL) {
+			delete it->second;
+		}
+		// NULL or not, we need to remove it from the map
+		_vars.erase(it);
+		removed = true;
+	}
+	return removed;
 }
 
 
@@ -315,8 +366,8 @@ void parser::clearVariables()
 void parser::useDefaultVariables()
 {
 	// these are the default variables
-	addVariable(new variable("e", 2.71828183));
-	addVariable(new variable("pi", 3.14159265));
+	addVariable("e", 2.71828183);
+	addVariable("pi", 3.14159265);
 }
 
 
@@ -718,7 +769,7 @@ value *parser::lookUpVariable( const std::string & aName )
 	// lock this map up so we can see what's there safely
 	spinlock::scoped_lock		lock(_vars_mutex);
 	// see if we already have a variable with this name
-	value	*v = _vars[aName];
+	variable	*v = _vars[aName];
 	if (v == NULL) {
 		// create it with the right variable name
 		if ((v = new variable(aName)) == NULL) {
@@ -889,20 +940,22 @@ bool parser::compile()
  * recursively to generate the complete, final expression for
  * the code starting at this point.
  */
-expression *parser::parseExpr( const std::string & aSrc, uint32_t & aPos )
+value *parser::parseExpr( const std::string & aSrc, uint32_t & aPos )
 {
 	/**
 	 * See if we start this off right, and of not, then toss
 	 * an error that can be caught. If so, then create an
 	 * expression to build upon.
 	 */
-	expression		*expr = NULL;
+	value		*expr = NULL;
 	if (aSrc[aPos] == '(') {
 		if ((expr = new expression()) == NULL) {
 			throw std::runtime_error("[parser::parseExpr] unable to create expression to place parsed data into!");
 		}
 		// move past the start of the expression: '('
 		++aPos;
+	} else {
+		throw std::runtime_error("[parser::parseExpr] syntax error - no '(' to start expression!");
 	}
 
 	/**
@@ -918,34 +971,67 @@ expression *parser::parseExpr( const std::string & aSrc, uint32_t & aPos )
 	while ((aPos < aSrc.length()) && (aSrc[aPos] != ')')) {
 		if ((c = aSrc[aPos]) == '(') {
 			// make sure we have a function already
-			if (expr->getFunction() == NULL) {
+			if (((expression *)expr)->getFunction() == NULL) {
 				// no can do - drop what we've created and bail
 				if (expr != NULL) {
 					delete expr;
 					expr = NULL;
 				}
-				throw std::runtime_error("[parser:parseExpr] an expression can't be the first element in an expression - it much be a function!");
+				throw std::runtime_error("[parser:parseExpr] an expression can't be the first element in an expression - it must be a function!");
 			}
 			// starting a new expression to parse
-			expression	*sub = parseExpr(aSrc, aPos);
+			value	*sub = parseExpr(aSrc, aPos);
 			if (sub != NULL) {
-				if (expr->addToArgs(sub)) {
-					addSubExpr(sub);
+				if (((expression *)expr)->addToArgs(sub)) {
+					// add as sub-expr ONLY if it's an expression
+					if (sub->isExpression()) {
+						addSubExpr((expression *)sub);
+					}
 				} else {
 					// couldn't add it - delete it so we don't leak
 					delete sub;
 					sub = NULL;
 				}
 			}
+			// the expression parser left us in the right spot
+			continue;
 		} else if (isspace(c)) {
 			if (in_token) {
 				/**
 				 * Handle the token, and then clear it out for the
-				 * next one
+				 * next one. There is a special "function" for the
+				 * setting of a variable - 'set'. We need to look
+				 * for that, and if we have it, we need to drop the
+				 * expression we're building and realize that it's
+				 * a variable, and build that instead.
 				 */
-				handleToken(expr, token);
-				token.clear();
-				in_token = false;
+				if (token == "set") {
+					// delete the existing expression as it's just wrong
+					if (expr != NULL) {
+						delete expr;
+						expr = NULL;
+					}
+					// now try to parse out the variable definition
+					if ((expr = parseVariable(aSrc, aPos)) == NULL) {
+						throw std::runtime_error("[parser::parseExpr] could not parse the variable definition");
+					} else {
+						// add this to the parser's list of vars
+						addVariable((variable * &)expr);
+					}
+					/**
+					 * We thought this was going to be an expression, but
+					 * it turned out to be a variable definition, we have
+					 * parsed that bad boy, and now it's time to leave.
+					 * Make sure we aren't in a token, and bail out.
+					 */
+					in_token = false;
+					break;
+				} else {
+					// simple token processing, with a clear to reset
+					handleToken((expression *)expr, token);
+					token.clear();
+					in_token = false;
+				}
 			}
 		} else {
 			// part of the token we're building
@@ -962,16 +1048,123 @@ expression *parser::parseExpr( const std::string & aSrc, uint32_t & aPos )
 	 * clear it out, etc. as we're all done.
 	 */
 	if (in_token) {
-		handleToken(expr, token);
+		handleToken((expression *)expr, token);
 	}
 
 	// make sure to move past the closing ')'
-	if (aSrc[aPos] == ')') {
+	if ((aSrc[aPos] == ')') && (aPos < aSrc.length())) {
 		++aPos;
 	}
 
 	// return whatever expression we have built up to now
 	return expr;
+}
+
+
+/**
+ * This method assumes that it's pointing into the source
+ * string just AFTER the '(set' part of a variable definition.
+ * We need to finish parsing the variable name and value -
+ * no matter how complex that value might be, and return it
+ * as a new variable. The caller will be responsible for
+ * deleting the variable when he's done with it or we will
+ * leak.
+ */
+variable *parser::parseVariable( const std::string & aSrc, uint32_t & aPos )
+{
+	variable	*retval = NULL;
+
+	/**
+	 * The general form of a setter is:
+	 *   (set x 14)
+	 * but it can be a complex expression as well:
+	 *   (set y (+ 1 2 3))
+	 * so we need to parse the name, and then parse the
+	 * potential expression that is the value, and make a
+	 * variable out of this and return it to the caller.
+	 */
+	char			c = '\0';
+	std::string		token;
+	bool			in_token = false;
+	bool			complete = false;
+	while ((aPos < aSrc.length()) && (aSrc[aPos] != ')')) {
+		if ((c = aSrc[aPos]) == '(') {
+			// make sure we have a variable already
+			if (retval == NULL) {
+				throw std::runtime_error("[parser:parseVariable] an expression can't be the first element after 'set' in a variable definition - it must be a name!");
+			}
+			// starting a new expression to parse as the value
+			complete = retval->set(parseExpr(aSrc, aPos));
+			// the expression parser left us in the right spot
+			continue;
+		} else if (isspace(c)) {
+			if (in_token) {
+				/**
+				 * Handle the token and then clear it out for
+				 * the rest of the parsing. If we have no name
+				 * for the variable, that's first, and we keep
+				 * it - otherwise, we parse out the value and
+				 * we should be done.
+				 */
+				if (retval == NULL) {
+					if ((retval = new variable(token)) == NULL) {
+						// create the error message for the bad creation
+						std::string		msg = "[parser::parseVariable] unable to create variable for the name: ";
+						msg.append(token);
+						// ...and now throw it so it can be delt with
+						throw std::runtime_error(msg);
+					}
+				} else if (!complete) {
+					// flag that we're done - if it succeeds
+					complete = retval->set(parseConst(token));
+				} else {
+					// drop the variable that we created
+					if (retval != NULL) {
+						delete retval;
+						retval = NULL;
+					}
+					// ...and then throw the exception
+					throw std::runtime_error("[parser:parseVariable] a 'set' requires only two things, and you have provided three!");
+				}
+				// now we can clear out the token for next time
+				token.clear();
+				in_token = false;
+			}
+		} else {
+			// part of the token we're building
+			token.push_back(c);
+			in_token = true;
+		}
+		// move to the next character and keep processing
+		++aPos;
+	}
+
+	/**
+	 * If we were in the middle of a token when we hit the end
+	 * of the variable, then handle it, but there's no need to
+	 * clear it out, etc. as we're all done.
+	 */
+	if (in_token) {
+		if (!complete) {
+			retval->set(parseConst(token));
+		} else {
+			// drop the variable that we created
+			if (retval != NULL) {
+				delete retval;
+				retval = NULL;
+			}
+			// ...and then throw the exception
+			throw std::runtime_error("[parser:parseVariable] a 'set' requires only two things, and you have provided three!");
+		}
+	}
+
+	// make sure to move past the closing ')'
+	if ((aSrc[aPos] == ')') && (aPos < aSrc.length())) {
+		++aPos;
+	}
+
+	// return whatever variable we have built up to now
+	return retval;
 }
 
 
@@ -993,7 +1186,7 @@ bool parser::handleToken( expression *anExpr, const std::string & aToken )
 	if (!error) {
 		if (anExpr == NULL) {
 			error = true;
-			throw std::runtime_error("[parser::handleToken] - the provided expression was NULL, and that's very bad news.");
+			throw std::runtime_error("[parser::handleToken] the provided expression was NULL, and that's very bad news.");
 		}
 	}
 
@@ -1008,7 +1201,7 @@ bool parser::handleToken( expression *anExpr, const std::string & aToken )
 			if (f == NULL) {
 				error = true;
 				// create the error message for the missing function
-				std::string		msg = "[parser::handleToken] - there is no function for the name: ";
+				std::string		msg = "[parser::handleToken] there is no function for the name: ";
 				msg.append(aToken);
 				// ...and now throw it so it can be delt with
 				throw std::runtime_error(msg);
@@ -1029,89 +1222,14 @@ bool parser::handleToken( expression *anExpr, const std::string & aToken )
 	 * the value based on the constant and add it to the expression.
 	 */
 	if (!error && !handled) {
-		/**
-		 * Our constants look like one of the following patterns:
-		 *
-		 * +/- 1 2 3 - simple integers all matching isdigit()
-		 * ... plus '.' and 'e'/'E' - doubles
-		 * 'YYYY-MM-DD' or 'YYYY-MM-DD HH:MM:SS.ssss' - timestamps
-		 */
-		size_t		len = aToken.length();
-		if ((aToken[0] == '\'') && (aToken[len - 1] == '\'')) {
-			// likely a data by our format
-			value	*v = new value(util::timer::parseTimestamp(aToken.substr(1, len - 2)));
-			if (v == NULL) {
-				error = true;
-				// create the error message for the malformed timestamp
-				std::string		msg = "[parser::handleToken] - unable to parse timestamp value: ";
-				msg.append(aToken);
-				// ...and now throw it so it can be delt with
-				throw std::runtime_error(msg);
-			} else {
-				// save this new guy as a constant in the parser
-				addConst(v);
-				// ...and add as argument to the expression
-				anExpr->addToArgs(v);
-				// ...and indicate that this token has been handled
-				handled = true;
-			}
-		} else if (aToken.find_first_not_of("+-0123456789.eE") == std::string::npos) {
-			// it's a number of some kind - find out which kind
-			if (aToken.find_first_of(".eE") == std::string::npos) {
-				// it's an integer
-				value	*v = new value(atoi(aToken.c_str()));
-				if (v == NULL) {
-					error = true;
-					// create the error message for the malformed integer
-					std::string		msg = "[parser::handleToken] - unable to parse int value: ";
-					msg.append(aToken);
-					// ...and now throw it so it can be delt with
-					throw std::runtime_error(msg);
-				} else {
-					// save this new guy as a constant in the parser
-					addConst(v);
-					// ...and add as argument to the expression
-					anExpr->addToArgs(v);
-					// ...and indicate that this token has been handled
-					handled = true;
-				}
-			} else {
-				// it's a double
-				value	*v = new value(atof(aToken.c_str()));
-				if (v == NULL) {
-					error = true;
-					// create the error message for the malformed double
-					std::string		msg = "[parser::handleToken] - unable to parse double value: ";
-					msg.append(aToken);
-					// ...and now throw it so it can be delt with
-					throw std::runtime_error(msg);
-				} else {
-					// save this new guy as a constant in the parser
-					addConst(v);
-					// ...and add as argument to the expression
-					anExpr->addToArgs(v);
-					// ...and indicate that this token has been handled
-					handled = true;
-				}
-			}
-		} else if ((aToken == "true") || (aToken == "false")) {
-			// it's a boolean
-			value	*v = new value(aToken[0] == 't');
-			if (v == NULL) {
-				error = true;
-				// create the error message for the malformed boolean
-				std::string		msg = "[parser::handleToken] - unable to parse bool value: ";
-				msg.append(aToken);
-				// ...and now throw it so it can be delt with
-				throw std::runtime_error(msg);
-			} else {
-				// save this new guy as a constant in the parser
-				addConst(v);
-				// ...and add as argument to the expression
-				anExpr->addToArgs(v);
-				// ...and indicate that this token has been handled
-				handled = true;
-			}
+		value	*v = parseConst(aToken);
+		if (v != NULL) {
+			// save this new guy as a constant in the parser
+			addConst(v);
+			// ...and add as argument to the expression
+			anExpr->addToArgs(v);
+			// ...and indicate that this token has been handled
+			handled = true;
 		}
 	}
 
@@ -1125,7 +1243,7 @@ bool parser::handleToken( expression *anExpr, const std::string & aToken )
 		if (v == NULL) {
 			error = true;
 			// create the error message for the missing variable
-			std::string		msg = "[parser::handleToken] - unable to find/create variable: ";
+			std::string		msg = "[parser::handleToken] unable to find/create variable: ";
 			msg.append(aToken);
 			// ...and now throw it so it can be delt with
 			throw std::runtime_error(msg);
@@ -1138,6 +1256,87 @@ bool parser::handleToken( expression *anExpr, const std::string & aToken )
 	}
 
 	return !error;
+}
+
+
+/**
+ * This method looks at the provided string and attempts to
+ * parse out a constant from it and return it as a new value
+ * pointer. If this is NOT successful, then this method
+ * will return NULL, but if not-NULL, it is the responsibility
+ * of the caller to delete the returned value or we will leak.
+ */
+value *parser::parseConst( const std::string & aToken )
+{
+	value		*retval = NULL;
+	bool		handled = false;
+
+	/**
+	 * Our constants look like one of the following patterns:
+	 *
+	 * +/- 1 2 3 - simple integers all matching isdigit()
+	 * ... plus '.' and 'e'/'E' - doubles
+	 * 'YYYY-MM-DD' or 'YYYY-MM-DD HH:MM:SS.ssss' - timestamps
+	 */
+	size_t		len = aToken.length();
+	if ((aToken[0] == '\'') && (aToken[len - 1] == '\'')) {
+		// likely a data by our format
+		retval = new value(util::timer::parseTimestamp(aToken.substr(1, len - 2)));
+		if (retval == NULL) {
+			// create the error message for the malformed timestamp
+			std::string		msg = "[parser::parseConst] unable to parse timestamp value: ";
+			msg.append(aToken);
+			// ...and now throw it so it can be delt with
+			throw std::runtime_error(msg);
+		} else {
+			// ...and indicate that this token has been handled
+			handled = true;
+		}
+	} else if (aToken.find_first_not_of("+-0123456789.eE") == std::string::npos) {
+		// it's a number of some kind - find out which kind
+		if (aToken.find_first_of(".eE") == std::string::npos) {
+			// it's an integer
+			retval = new value(atoi(aToken.c_str()));
+			if (retval == NULL) {
+				// create the error message for the malformed integer
+				std::string		msg = "[parser::parseConst] unable to parse int value: ";
+				msg.append(aToken);
+				// ...and now throw it so it can be delt with
+				throw std::runtime_error(msg);
+			} else {
+				// ...and indicate that this token has been handled
+				handled = true;
+			}
+		} else {
+			// it's a double
+			retval = new value(atof(aToken.c_str()));
+			if (retval == NULL) {
+				// create the error message for the malformed double
+				std::string		msg = "[parser::parseConst] unable to parse double value: ";
+				msg.append(aToken);
+				// ...and now throw it so it can be delt with
+				throw std::runtime_error(msg);
+			} else {
+				// ...and indicate that this token has been handled
+				handled = true;
+			}
+		}
+	} else if ((aToken == "true") || (aToken == "false")) {
+		// it's a boolean
+		retval = new value(aToken[0] == 't');
+		if (retval == NULL) {
+			// create the error message for the malformed boolean
+			std::string		msg = "[parser::parseConst] unable to parse bool value: ";
+			msg.append(aToken);
+			// ...and now throw it so it can be delt with
+			throw std::runtime_error(msg);
+		} else {
+			// ...and indicate that this token has been handled
+			handled = true;
+		}
+	}
+
+	return retval;
 }
 }		// end of namespace lkit
 
