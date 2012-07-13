@@ -249,26 +249,53 @@ respective results:
 |`(and 1 0 0 1)`                       | false        |
 |`(not 1)`                             | false        |
 
-TODO List
----------
-
 ### Variable Definition and Assignment
 
-I need to add in the basic variable assignment code to the parser. This should
-look like this:
+Variables can be referenced in the code anywhere a constant can be used.
+The variables are typically the output of an expression, but they can be
+simple constants as well. There are a few default variables defined in
+the system at this time:
+
+	e = 2.71828183
+	pi = 3.14159265
+
+but setting a variable is very simple. The code looks like this:
 
 	(set x 14.5)
 
-and allow for variables to have their values set as many times as needed.
-Meaning they will **not** be immutable variables. But they will be set at
-compile time, so the user is going to have to be careful about the order
-that the variable assignments are being made. The _expression_ that
-is generated for this assignment _function_ is simply the variable itself,
-so the following:
+And the result is the value of the variable, in this case, the double 14.5.
+This can work in many ways, for instance, the following defines the variable
+`x` to be 6, and then uses that in another calculation in the code:
 
-	(+ 1 2 (set x 3))
+	(* (set x (+ 1 2 3)) 3 (* x 2))
 
-evaluates to `6`.
+Since the processing of the `set` _function_ is done at compile time, and
+the lookup of the value of `x` in the last multiplication is done at
+evaluation time, you don't have to worry about variables not being defined
+_in time_.
+
+Additionally, as long as the `lkit::parser` is active, the variables
+defined in one source code can be used in another. For instance, the
+following first defines the variable `x` and then uses it in the next
+code segment:
+
+```cpp
+lkit::parser	p;
+p.setSource("(+ (set x 5) 3 (* x 2))");
+p.eval();
+p.setSource("(* x 7 14)");
+value	v = p.eval();
+```
+i.e. the parser _retains_ all variable and function definitions across
+invocations until `reset()` or `clear()` is called.
+
+Additionally, the parser allows for variables to have their values set as
+many times as needed. Meaning they will **not** be immutable variables.
+But they will be set at compile time, so the user is going to have to be
+careful about the order that the variable assignments are being made.
+
+TODO List
+---------
 
 ### Function Definition
 
