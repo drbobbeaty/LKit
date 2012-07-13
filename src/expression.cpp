@@ -354,6 +354,19 @@ void expression::clearArgs()
  *
  *******************************************************************/
 /**
+ * Because C++ doesn't have a nice 'instanceof' operator, we
+ * need to have an efficient way to know what this particular
+ * instance is REALLY. Since we can have the base class and a
+ * few subclasses, it is necessary to put the tests in this,
+ * the base class, and then just overwrite them in the subclasses.
+ */
+bool expression::isExpression() const
+{
+	return true;
+}
+
+
+/**
  * There are a lot of times that a human-readable version of
  * this instance will come in handy. This is that method. It's
  * not necessarily meant to be something to process, but most
