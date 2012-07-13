@@ -44,7 +44,8 @@ namespace lkit {
  */
 variable::variable() :
 	value(),
-	_name()
+	_name(),
+	_expr(NULL)
 {
 }
 
@@ -58,7 +59,8 @@ variable::variable() :
  */
 variable::variable( const std::string & aName ) :
 	value(),
-	_name(aName)
+	_name(aName),
+	_expr(NULL)
 {
 }
 
@@ -70,28 +72,40 @@ variable::variable( const std::string & aName ) :
  */
 variable::variable( const std::string & aName, bool aValue ) :
 	value(aValue),
-	_name(aName)
+	_name(aName),
+	_expr(NULL)
 {
 }
 
 
 variable::variable( const std::string & aName, int aValue ) :
 	value(aValue),
-	_name(aName)
+	_name(aName),
+	_expr(NULL)
 {
 }
 
 
 variable::variable( const std::string & aName, double aValue ) :
 	value(aValue),
-	_name(aName)
+	_name(aName),
+	_expr(NULL)
 {
 }
 
 
 variable::variable( const std::string & aName, uint64_t aValue ) :
 	value(aValue),
-	_name(aName)
+	_name(aName),
+	_expr(NULL)
+{
+}
+
+
+variable::variable( const std::string & aName, value *aValue ) :
+	value(),
+	_name(aName),
+	_expr(aValue)
 {
 }
 
@@ -102,9 +116,12 @@ variable::variable( const std::string & aName, uint64_t aValue ) :
  * floating around in the system.
  */
 variable::variable( const variable & anOther ) :
-	value(anOther),
-	_name(anOther._name)
+	value(),
+	_name(),
+	_expr(NULL)
 {
+	// let the '=' operator do all the heavy lifting
+	*this = anOther;
 }
 
 
@@ -126,6 +143,11 @@ value *variable::clone() const
  */
 variable::~variable()
 {
+	// if I have an expression, then delete it
+	if (_expr != NULL) {
+		delete _expr;
+		_expr = NULL;
+	}
 }
 
 
@@ -141,6 +163,22 @@ variable & variable::operator=( const variable & anOther )
 		value::operator=(anOther);
 		// ...then we'll do our ivars
 		_name = anOther._name;
+		// clone the other's expression - if he has one
+		if (anOther._expr != NULL) {
+			// drop anything I might have at this time
+			if (_expr != NULL) {
+				delete _expr;
+				_expr = NULL;
+			}
+			// ...and clone in his expression
+			_expr = anOther._expr->clone();
+		} else {
+			// he has no expression, so neither should I
+			if (_expr != NULL) {
+				delete _expr;
+				_expr = NULL;
+			}
+		}
 	}
 	return *this;
 }
@@ -157,6 +195,11 @@ variable & variable::operator=( const value & anOther )
 	if (this != & anOther) {
 		// let the super class do all it's stuff...
 		value::operator=(anOther);
+		// and if I have an expression, drop it
+		if (_expr != NULL) {
+			delete _expr;
+			_expr = NULL;
+		}
 	}
 	return *this;
 }
@@ -167,6 +210,43 @@ variable & variable::operator=( const value & anOther )
  *                        Accessor Methods
  *
  *******************************************************************/
+/**
+ * This method expands the support for the set() methods in
+ * the value class by allowing the caller to set the value with
+ * an expression, or some other value subclass. This is not in
+ * the base value class, so we had to add it here.
+ */
+bool variable::set( bool aValue )
+{
+	return value::set(aValue);
+}
+
+
+bool variable::set( int aValue )
+{
+	return value::set(aValue);
+}
+
+
+bool variable::set( double aValue )
+{
+	return value::set(aValue);
+}
+
+
+bool variable::set( uint64_t aValue )
+{
+	return value::set(aValue);
+}
+
+
+bool variable::set( value *aValue )
+{
+	spinlock::scoped_lock	lock(mutex());
+	return set_nl(aValue);
+}
+
+
 /**
  * This method takes a value for this instance and places it into
  * this guy if it's possible. If all goes well, then a 'true' will
@@ -217,6 +297,23 @@ bool variable::set( const std::string & aName, uint64_t aValue )
 }
 
 
+bool variable::set( const std::string & aName, value *aValue )
+{
+	bool	error = false;
+	if (aValue != NULL) {
+		spinlock::scoped_lock	lock(mutex());
+		// clear out everything that might be in the super class
+		clear_nl();
+		// ...and then set the things we know we need
+		_name = aName;
+		_expr = aValue;
+	} else {
+		error = true;
+	}
+	return !error;
+}
+
+
 /**
  * This method returns the name of this variable, as defined by
  * the caller. This should be set in one of the setters or the
@@ -237,6 +334,19 @@ std::string variable::getName() const
  *
  *******************************************************************/
 /**
+ * Because C++ doesn't have a nice 'instanceof' operator, we
+ * need to have an efficient way to know what this particular
+ * instance is REALLY. Since we can have the base class and a
+ * few subclasses, it is necessary to put the tests in this,
+ * the base class, and then just overwrite them in the subclasses.
+ */
+bool variable::isVariable() const
+{
+	return true;
+}
+
+
+/**
  * There are a lot of times that a human-readable version of
  * this instance will come in handy. This is that method. It's
  * not necessarily meant to be something to process, but most
@@ -246,9 +356,7 @@ std::string variable::getName() const
 std::string variable::toString() const
 {
 	spinlock::scoped_lock	lock((spinlock &)mutex());
-	std::ostringstream	msg;
-	msg << "[" << _name << " = " << value::toString() << "]";
-	return msg.str();
+	return toString_nl();
 }
 
 
@@ -322,6 +430,167 @@ bool variable::operator==( const value & anOther ) const
 bool variable::operator!=( const value & anOther ) const
 {
 	return !operator==(anOther);
+}
+
+
+/*******************************************************************
+ *
+ *                      Subclass Accessor Methods
+ *
+ *******************************************************************/
+/**
+ * This method takes a value for this instance and places it into
+ * this guy if it's possible. The key with the "_nl" is that it
+ * means "no lock". No lock will be placed on the instance in the
+ * process of setting these values. That means the caller has to
+ * do it.
+ */
+bool variable::set_nl( const value & aValue )
+{
+	return value::set_nl(aValue);
+}
+
+
+bool variable::set_nl( bool aValue )
+{
+	return value::set_nl(aValue);
+}
+
+
+bool variable::set_nl( int aValue )
+{
+	return value::set_nl(aValue);
+}
+
+
+bool variable::set_nl( double aValue )
+{
+	return value::set_nl(aValue);
+}
+
+
+bool variable::set_nl( uint64_t aValue )
+{
+	return value::set_nl(aValue);
+}
+
+
+bool variable::set_nl( value *aValue )
+{
+	bool		error = false;
+	if (aValue == NULL) {
+		error = true;
+	} else {
+		// first, clear out everything we might have
+		clear_nl();
+		// ...now set AND SAVE the pointer for our new value
+		_expr = aValue;
+	}
+	return !error;
+}
+
+
+/**
+ * This method simply resets the value to it's "undefined"
+ * state - clearing out any value that might be currently
+ * stored in the value. The key with the "_nl" is that it
+ * means "no lock". No lock will be placed on the instance
+ * in the process of setting these values. That means the
+ * caller has to do it.
+ */
+void variable::clear_nl()
+{
+	// first, clear out my stuff...
+	if (_expr == NULL) {
+		delete _expr;
+		_expr = NULL;
+	}
+	// ...now let the super do it's thing...
+	value::clear_nl();
+}
+
+
+/**
+ * This method gets the value for this instance, and it may be quite
+ * involved in getting the value. This will be the way to get
+ * constants as well as evaluate functions and expressions.
+ *
+ * The key with the "_nl" is that it means "no lock". No lock
+ * will be placed on the instance in the process of setting
+ * these values. That means the caller has to do it.
+ */
+value variable::eval_nl()
+{
+	if (_expr != NULL) {
+		set_nl(_expr->eval());
+	}
+	return value(*this);
+}
+
+
+bool variable::evalAsBool_nl()
+{
+	if (_expr != NULL) {
+		set_nl(_expr->eval());
+	}
+	return value::evalAsBool_nl();
+}
+
+
+int variable::evalAsInt_nl()
+{
+	if (_expr != NULL) {
+		set_nl(_expr->eval());
+	}
+	return value::evalAsInt_nl();
+}
+
+
+double variable::evalAsDouble_nl()
+{
+	if (_expr != NULL) {
+		set_nl(_expr->eval());
+	}
+	return value::evalAsDouble_nl();
+}
+
+
+uint64_t variable::evalAsTime_nl()
+{
+	if (_expr != NULL) {
+		set_nl(_expr->eval());
+	}
+	return value::evalAsTime_nl();
+}
+
+
+/*******************************************************************
+ *
+ *                      Subcalss Utility Methods
+ *
+ *******************************************************************/
+/**
+ * There are a lot of times that a human-readable version of
+ * this instance will come in handy. This is that method. It's
+ * not necessarily meant to be something to process, but most
+ * likely what a debugging system would want to write out for
+ * this guy.
+ *
+ * The "_nl" is for no-lock, and this is used by subclasses to
+ * get the representation of this instance variable without the
+ * locking that we'll get with the public interface.
+ */
+std::string variable::toString_nl() const
+{
+	std::ostringstream	msg;
+	msg << "[" << _name << " = ";
+	if (_expr != NULL) {
+		msg << _expr->toString();
+	} else {
+		msg << value::toString_nl();
+	}
+	msg << "]";
+	return msg.str();
 }
 }		// end of namespace lkit
 

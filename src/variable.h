@@ -62,6 +62,7 @@ class variable :
 		variable( const std::string & aName, int aValue );
 		variable( const std::string & aName, double aValue );
 		variable( const std::string & aName, uint64_t aValue );
+		variable( const std::string & aName, value *aValue );
 		/**
 		 * This is the standard copy constructor that needs to be in every
 		 * class to make sure that we control how many copies we have
@@ -101,6 +102,17 @@ class variable :
 		 *
 		 *******************************************************************/
 		/**
+		 * This method expands the support for the set() methods in
+		 * the value class by allowing the caller to set the value with
+		 * an expression, or some other value subclass. This is not in
+		 * the base value class, so we had to add it here.
+		 */
+		virtual bool set( bool aValue );
+		virtual bool set( int aValue );
+		virtual bool set( double aValue );
+		virtual bool set( uint64_t aValue );
+		virtual bool set( value *aValue );
+		/**
 		 * This method takes a value for this instance and places it into
 		 * this guy if it's possible. If all goes well, then a 'true' will
 		 * be returned, otherwise, a 'false' will be returned. This will be
@@ -110,6 +122,7 @@ class variable :
 		virtual bool set( const std::string & aName, int aValue );
 		virtual bool set( const std::string & aName, double aValue );
 		virtual bool set( const std::string & aName, uint64_t aValue );
+		virtual bool set( const std::string & aName, value *aValue );
 		/**
 		 * This method returns the name of this variable, as defined by
 		 * the caller. This should be set in one of the setters or the
@@ -123,6 +136,15 @@ class variable :
 		 *                         Utility Methods
 		 *
 		 *******************************************************************/
+		/**
+		 * Because C++ doesn't have a nice 'instanceof' operator, we
+		 * need to have an efficient way to know what this particular
+		 * instance is REALLY. Since we can have the base class and a
+		 * few subclasses, it is necessary to put the tests in this,
+		 * the base class, and then just overwrite them in the subclasses.
+		 */
+		virtual bool isVariable() const;
+
 		/**
 		 * There are a lot of times that a human-readable version of
 		 * this instance will come in handy. This is that method. It's
@@ -170,6 +192,69 @@ class variable :
 		 */
 		bool operator!=( const value & anOther ) const;
 
+	protected:
+		/*******************************************************************
+		 *
+		 *                      Subclass Accessor Methods
+		 *
+		 *******************************************************************/
+		/**
+		 * This method takes a value for this instance and places it into
+		 * this guy if it's possible. The key with the "_nl" is that it
+		 * means "no lock". No lock will be placed on the instance in the
+		 * process of setting these values. That means the caller has to
+		 * do it.
+		 */
+		virtual bool set_nl( value *aValue );
+		virtual bool set_nl( const value & aValue );
+		virtual bool set_nl( bool aValue );
+		virtual bool set_nl( int aValue );
+		virtual bool set_nl( double aValue );
+		virtual bool set_nl( uint64_t aValue );
+
+		/**
+		 * This method simply resets the value to it's "undefined"
+		 * state - clearing out any value that might be currently
+		 * stored in the value. The key with the "_nl" is that it
+		 * means "no lock". No lock will be placed on the instance
+		 * in the process of setting these values. That means the
+		 * caller has to do it.
+		 */
+		virtual void clear_nl();
+
+		/**
+		 * This method gets the value for this instance, and it may be quite
+		 * involved in getting the value. This will be the way to get
+		 * constants as well as evaluate functions and expressions.
+		 *
+		 * The key with the "_nl" is that it means "no lock". No lock
+		 * will be placed on the instance in the process of setting
+		 * these values. That means the caller has to do it.
+		 */
+		virtual value eval_nl();
+		virtual bool evalAsBool_nl();
+		virtual int evalAsInt_nl();
+		virtual double evalAsDouble_nl();
+		virtual uint64_t evalAsTime_nl();
+
+		/*******************************************************************
+		 *
+		 *                     Subcalss Utility Methods
+		 *
+		 *******************************************************************/
+		/**
+		 * There are a lot of times that a human-readable version of
+		 * this instance will come in handy. This is that method. It's
+		 * not necessarily meant to be something to process, but most
+		 * likely what a debugging system would want to write out for
+		 * this guy.
+		 *
+		 * The "_nl" is for no-lock, and this is used by subclasses to
+		 * get the representation of this instance variable without the
+		 * locking that we'll get with the public interface.
+		 */
+		virtual std::string toString_nl() const;
+
 	private:
 		/**
 		 * Every variable has a name, and this is the one for this guy.
@@ -177,6 +262,14 @@ class variable :
 		 * what it can be, but common sense should rule the day.
 		 */
 		std::string				_name;
+		/**
+		 * There will be times when the variable isn't a simple value,
+		 * but an expression. In order to have this work properly, we
+		 * need to have a pointer to the expression, and then we'll
+		 * evaluate it, if necessary, in the protected evaluation
+		 * methods.
+		 */
+		value					*_expr;
 };
 }		// end of namespace lkit
 
