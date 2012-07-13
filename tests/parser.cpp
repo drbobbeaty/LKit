@@ -99,6 +99,30 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	if (!error) {
+		std::string		src = "(+ (set x 5) 3 (* x 2))";
+		lkit::value		ref = 18;
+		p.setSource(src);
+		if (p.eval() == ref) {
+			std::cout << "Success, parsed " << src << " into: " << ref << std::endl;
+		} else {
+			error = true;
+			std::cout << "ERROR, unable to parse " << src << " into: " << ref << " ... got: " << p.eval() << std::endl;
+		}
+	}
+
+	if (!error) {
+		std::string		src = "(* (set x (+ 1 2 3)) 3 (* x 2))";
+		lkit::value		ref = 216;
+		p.setSource(src);
+		if (p.eval() == ref) {
+			std::cout << "Success, parsed " << src << " into: " << ref << std::endl;
+		} else {
+			error = true;
+			std::cout << "ERROR, unable to parse " << src << " into: " << ref << " ... got: " << p.eval() << std::endl;
+		}
+	}
+
 	std::cout << (error ? "FAILED!" : "SUCCESS") << std::endl;
 	return (error ? 1 : 0);
 }
