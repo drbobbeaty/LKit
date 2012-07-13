@@ -331,6 +331,25 @@ void value::clear()
  *
  *******************************************************************/
 /**
+ * Because C++ doesn't have a nice 'instanceof' operator, we
+ * need to have an efficient way to know what this particular
+ * instance is REALLY. Since we can have the base class and a
+ * few subclasses, it is necessary to put the tests in this,
+ * the base class, and then just overwrite them in the subclasses.
+ */
+bool value::isVariable() const
+{
+	return false;
+}
+
+
+bool value::isExpression() const
+{
+	return false;
+}
+
+
+/**
  * There are a lot of times that a human-readable version of
  * this instance will come in handy. This is that method. It's
  * not necessarily meant to be something to process, but most
@@ -340,25 +359,7 @@ void value::clear()
 std::string value::toString() const
 {
 	boost::detail::spinlock::scoped_lock	lock(_mutex);
-	std::ostringstream	msg;
-	switch (_type) {
-		case eUnknown:
-			msg << "(unknown)";
-			break;
-		case eBool:
-			msg << "(bool) " << (_boolValue ? "true" : "false");
-			break;
-		case eInt:
-			msg << "(int) " << _intValue;
-			break;
-		case eDouble:
-			msg << "(double) " << _doubleValue;
-			break;
-		case eTime:
-			msg << "(uint64_t) " << _timeValue;
-			break;
-	}
-	return msg.str();
+	return toString_nl();
 }
 
 
@@ -1514,6 +1515,46 @@ uint64_t value::evalAsTime_nl()
 boost::detail::spinlock & value::mutex() const
 {
 	return _mutex;
+}
+
+
+/*******************************************************************
+ *
+ *                         Utility Methods
+ *
+ *******************************************************************/
+/**
+ * There are a lot of times that a human-readable version of
+ * this instance will come in handy. This is that method. It's
+ * not necessarily meant to be something to process, but most
+ * likely what a debugging system would want to write out for
+ * this guy.
+ *
+ * The "_nl" is for no-lock, and this is used by subclasses to
+ * get the representation of this instance variable without the
+ * locking that we'll get with the public interface.
+ */
+std::string value::toString_nl() const
+{
+	std::ostringstream	msg;
+	switch (_type) {
+		case eUnknown:
+			msg << "(unknown)";
+			break;
+		case eBool:
+			msg << "(bool) " << (_boolValue ? "true" : "false");
+			break;
+		case eInt:
+			msg << "(int) " << _intValue;
+			break;
+		case eDouble:
+			msg << "(double) " << _doubleValue;
+			break;
+		case eTime:
+			msg << "(uint64_t) " << _timeValue;
+			break;
+	}
+	return msg.str();
 }
 }	// end of namespace lkit
 

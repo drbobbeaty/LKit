@@ -162,6 +162,16 @@ class value
 		 *
 		 *******************************************************************/
 		/**
+		 * Because C++ doesn't have a nice 'instanceof' operator, we
+		 * need to have an efficient way to know what this particular
+		 * instance is REALLY. Since we can have the base class and a
+		 * few subclasses, it is necessary to put the tests in this,
+		 * the base class, and then just overwrite them in the subclasses.
+		 */
+		virtual bool isVariable() const;
+		virtual bool isExpression() const;
+
+		/**
 		 * There are a lot of times that a human-readable version of
 		 * this instance will come in handy. This is that method. It's
 		 * not necessarily meant to be something to process, but most
@@ -360,7 +370,7 @@ class value
 		 * in the process of setting these values. That means the
 		 * caller has to do it.
 		 */
-		void clear_nl();
+		virtual void clear_nl();
 
 		/**
 		 * This method gets the value for this instance, and it may be quite
@@ -383,6 +393,24 @@ class value
 		 * to lock something up while they do their thing.
 		 */
 		boost::detail::spinlock & mutex() const;
+
+		/*******************************************************************
+		 *
+		 *                         Utility Methods
+		 *
+		 *******************************************************************/
+		/**
+		 * There are a lot of times that a human-readable version of
+		 * this instance will come in handy. This is that method. It's
+		 * not necessarily meant to be something to process, but most
+		 * likely what a debugging system would want to write out for
+		 * this guy.
+		 *
+		 * The "_nl" is for no-lock, and this is used by subclasses to
+		 * get the representation of this instance variable without the
+		 * locking that we'll get with the public interface.
+		 */
+		virtual std::string toString_nl() const;
 
 	private:
 		/**
