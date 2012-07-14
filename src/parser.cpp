@@ -59,9 +59,9 @@ parser::parser() :
 	_vars_mutex(),
 	_const(),
 	_const_mutex(),
+	_expr(),
 	_subs(),
-	_subs_mutex(),
-	_expr(NULL)
+	_expr_mutex()
 {
 	// reset the parser for the star of something neat
 	reset();
@@ -81,9 +81,9 @@ parser::parser( const std::string & aSource ) :
 	_vars_mutex(),
 	_const(),
 	_const_mutex(),
+	_expr(),
 	_subs(),
-	_subs_mutex(),
-	_expr(NULL)
+	_expr_mutex()
 {
 	// reset the parser for the star of something neat
 	if (reset()) {
@@ -107,9 +107,9 @@ parser::parser( const parser & anOther ) :
 	_vars_mutex(),
 	_const(),
 	_const_mutex(),
+	_expr(),
 	_subs(),
-	_subs_mutex(),
-	_expr(NULL)
+	_expr_mutex()
 {
 	// let the '=' operator do the heavy lifting...
 	*this = anOther;
@@ -159,11 +159,8 @@ void parser::setSource( const std::string & aSource )
 {
 	spinlock::scoped_lock		lock(_src_mutex);
 	_src = aSource;
-	// if we have an expression, then drop it
-	if (_expr != NULL) {
-		delete _expr;
-		_expr = NULL;
-	}
+	// if we have any expressions, then drop them - but save the subs
+	clearExpr(false);
 }
 
 
@@ -286,7 +283,7 @@ bool parser::addVariable( const std::string & aName, const value & aValue )
 		*old = aValue;
 	} else {
 		// place a new variable into the map
-		_vars[aName] = new variable(aName, aValue.clone());
+		_vars[aName] = new variable(aName, aValue);
 	}
 
 	return !error;
@@ -489,10 +486,12 @@ value parser::eval()
 	value		v;
 	// make sure it's compiled and ready to go
 	if (compile()) {
-		spinlock::scoped_lock		lock(_src_mutex);
+		spinlock::scoped_lock		lock(_expr_mutex);
 		// if we have an expression, then eval it for returning
-		if (_expr != NULL) {
-			v = _expr->eval();
+		BOOST_FOREACH( expression *e, _expr ) {
+			if (e != NULL) {
+				v = e->eval();
+			}
 		}
 	}
 	return v;
@@ -510,11 +509,11 @@ void parser::clear()
 {
 	// ...just assign the empty string to the source
 	setSource(std::string());
-	// clear out everything we have - functions, variables and such
-	clearFunctions();
+	// clear out everything we have - variables, functions and such
 	clearVariables();
+	clearFunctions();
 	clearConsts();
-	clearSubExpr();
+	clearExpr();
 }
 
 
@@ -854,6 +853,18 @@ void parser::clearConsts()
 
 
 /**
+ * This method returns the actual reference to the list of parsed
+ * expressions for this parser. Great care should be exercised,
+ * as this is the ACTUAL list, and can be modified by other threads
+ * so please be careful.
+ */
+const expr_list_t & parser::getExpr() const
+{
+	return _expr;
+}
+
+
+/**
  * This method returns the actual reference to the map of known
  * sub-expressions for this parser. Great care should be exercised,
  * as this is the ACTUAL list, and can be modified by other threads
@@ -862,6 +873,23 @@ void parser::clearConsts()
 const expr_list_t & parser::getSubExpr() const
 {
 	return _subs;
+}
+
+
+/**
+ * This method adds the provided expression to the list of
+ * expressions for this parser. No checks will be made to see
+ * if this expression already exists. Period.
+ *
+ * The memory management of the expressions will become the
+ * responsible of the parser, so the caller has to be willing
+ * to relinquish control.
+ */
+bool parser::addExpr( expression *anExpression )
+{
+	spinlock::scoped_lock		lock(_expr_mutex);
+	_expr.push_back(anExpression);
+	return true;
 }
 
 
@@ -876,27 +904,57 @@ const expr_list_t & parser::getSubExpr() const
  */
 bool parser::addSubExpr( expression *anExpression )
 {
-	spinlock::scoped_lock		lock(_subs_mutex);
+	spinlock::scoped_lock		lock(_expr_mutex);
 	_subs.push_back(anExpression);
 	return true;
 }
 
 
 /**
- * This method will remove ALL the known subexpressions from the
+ * This method will remove ALL the known expressions from the
  * list for this parser.
  */
-void parser::clearSubExpr()
+void parser::clearExpr( bool includeSubExpr )
 {
-	spinlock::scoped_lock		lock(_subs_mutex);
-	// delete everything from the list that's not NULL...
-	for (expr_list_t::iterator it = _subs.begin(); it != _subs.end(); ++it) {
+	spinlock::scoped_lock		lock(_expr_mutex);
+	/**
+	 * First, delete all the subexpressions in the list. We need
+	 * to get rid of them all in order not to leak.
+	 */
+	if (includeSubExpr) {
+		for (expr_list_t::iterator it = _subs.begin(); it != _subs.end(); ++it) {
+			if (*it != NULL) {
+				delete (*it);
+			}
+		}
+		// now we can clear out the list as everything is deleted
+		_subs.clear();
+	}
+
+	/**
+	 * Next, delete the top-level expressions as they too, need to
+	 * go as we don't want to leak.
+	 */
+	for (expr_list_t::iterator it = _expr.begin(); it != _expr.end(); ++it) {
 		if (*it != NULL) {
 			delete (*it);
 		}
 	}
 	// now we can clear out the list as everything is deleted
-	_subs.clear();
+	_expr.clear();
+}
+
+
+/**
+ * This method looks at the listof expressions in a thread-safe
+ * way, and if there are expressions coompiled from source, then
+ * it returns 'true'. This is used to see if we need to compile
+ * the source into a language tree.
+ */
+bool parser::isCompiled()
+{
+	spinlock::scoped_lock		lock(_expr_mutex);
+	return !_expr.empty();
 }
 
 
@@ -917,15 +975,35 @@ bool parser::compile()
 	// make sure they don't change the source while we work...
 	spinlock::scoped_lock		lock(_src_mutex);
 	// see if we need to compile anything at all
-	if (_expr == NULL) {
-		uint32_t	pos = _src.find('(');
-		if (pos < _src.length()) {
-			if ((_expr = parseExpr(_src, pos)) == NULL) {
-				error = true;
+	if (!isCompiled()) {
+		value		*e = NULL;
+		char		c = '\0';
+		uint32_t	len = _src.length();
+		for (uint32_t pos = 0; pos < len; ++pos) {
+			// skip all white space - it's unimportant
+			if (isspace((c = _src[pos]))) {
+				continue;
 			}
-		} else {
-			// no start of an expression - bad news
-			error = true;
+			// see if we have another expression to process
+			if (c == '(') {
+				if ((e = parseExpr(_src, pos)) == NULL) {
+					// can't parse it, drop everything and bail
+					error = true;
+					clearExpr();
+					break;
+				} else {
+					/**
+					 * Looks good, so add it to the list - but ONLY
+					 * if it's not a variable definition. Then it's
+					 * already accounted for in the variable list.
+					 */
+					if (e->isExpression()) {
+						addExpr((expression *)e);
+					}
+					// correct for the fact we're on the right spot
+					--pos;
+				}
+			}
 		}
 	}
 	return !error;

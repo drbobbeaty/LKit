@@ -212,6 +212,19 @@ and evaluates to:
 
 	1.0
 
+### Multiple Expressions
+
+The language allows for multiple expressions to be in a single source. For
+example, the following is a simple way to define the variable `x` and then
+use it in the subsequent expression:
+
+	(set x (+ 1 2 3))
+	(* x 3 (* x 2))
+
+The parser will make _both_ language trees, and evaluate them in the order
+in which they appeared in the code. The resulting value of the evaluation
+will be the _last_ expression evaluated.
+
 ### Expressions as Values in Expressions
 
 Of course this can all be included as a _value_ (a.k.a. _argument_) in another

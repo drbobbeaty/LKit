@@ -340,12 +340,29 @@ class parser
 		virtual void clearConsts();
 
 		/**
+		 * This method returns the actual reference to the list of parsed
+		 * expressions for this parser. Great care should be exercised,
+		 * as this is the ACTUAL list, and can be modified by other threads
+		 * so please be careful.
+		 */
+		virtual const expr_list_t & getExpr() const;
+		/**
 		 * This method returns the actual reference to the map of known
 		 * sub-expressions for this parser. Great care should be exercised,
 		 * as this is the ACTUAL list, and can be modified by other threads
 		 * so please be careful.
 		 */
 		virtual const expr_list_t & getSubExpr() const;
+		/**
+		 * This method adds the provided expression to the list of
+		 * expressions for this parser. No checks will be made to see
+		 * if this expression already exists. Period.
+		 *
+		 * The memory management of the expressions will become the
+		 * responsible of the parser, so the caller has to be willing
+		 * to relinquish control.
+		 */
+		virtual bool addExpr( expression *anExpression );
 		/**
 		 * This method adds the provided expression to the list of
 		 * sub-expressions for this parser. No checks will be made to see
@@ -357,10 +374,17 @@ class parser
 		 */
 		virtual bool addSubExpr( expression *anExpression );
 		/**
-		 * This method will remove ALL the known subexpressions from the
+		 * This method will remove ALL the known expressions from the
 		 * list for this parser.
 		 */
-		virtual void clearSubExpr();
+		virtual void clearExpr( bool includeSubExpr = true );
+		/**
+		 * This method looks at the listof expressions in a thread-safe
+		 * way, and if there are expressions coompiled from source, then
+		 * it returns 'true'. This is used to see if we need to compile
+		 * the source into a language tree.
+		 */
+		virtual bool isCompiled();
 
 		/*******************************************************************
 		 *
@@ -451,21 +475,16 @@ class parser
 		// ...and a simple spinlock to control access to it
 		mutable boost::detail::spinlock	_const_mutex;
 		/**
-		 * These are all the sub-expressions that this parser knows about -
-		 * in a simple list. These are created in the parsing of the source,
-		 * but really don't hold much as all the values, constants, and
-		 * functions are owned by the parser.
+		 * These are all the expressions and sub-expressions that this
+		 * parser knows about - in two simple lists. These are created
+		 * in the parsing of the source, but really don't hold much as
+		 * all the values, constants, and functions are owned by the
+		 * parser.
 		 */
+		expr_list_t						_expr;
 		expr_list_t						_subs;
 		// ...and a simple spinlock to control access to it
-		mutable boost::detail::spinlock	_subs_mutex;
-		/**
-		 * This is the final expression for this code. It all has to boil
-		 * down to one expression with a bunch of functions and variables.
-		 * The control of this ivar will be inline with the source as it's
-		 * the direct parsed result of the source.
-		 */
-		value							*_expr;
+		mutable boost::detail::spinlock	_expr_mutex;
 };
 }		// end of namespace lkit
 
