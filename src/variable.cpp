@@ -66,6 +66,22 @@ variable::variable( const std::string & aName ) :
 
 
 /**
+ * This version of the constructor takes a name and a value and
+ * makes a simple variable. This is very convenient as the
+ * variable is a value, but sometimes we need to make a new
+ * instance based on an old one.
+ */
+variable::variable( const std::string & aName, const value & anOther ) :
+	value(),
+	_name(aName),
+	_expr(NULL)
+{
+	// let the super's '=' operator do all the work.
+	value::operator=(anOther);
+}
+
+
+/**
  * These constructors take the different allowed types and create
  * variables based on that argument. This sets the name, type as
  * well as the actual value for this new instance.
